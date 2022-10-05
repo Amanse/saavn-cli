@@ -1,8 +1,12 @@
-use std::fmt::format;
-
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{Parser,  ValueEnum};
+use std::io::Cursor;
 use serde_json::{Result, Value};
 use serde::Deserialize;
+
+
+use std::io::Read;
+use std::fs::File;
+use std::io::prelude::*;
 
 const SEARCH_URL: &str = "https://www.jiosaavn.com/api.php?_format=json&n=5&p=1&_marker=0&ctx=android&__call=search.getResults&q=";
 
@@ -35,21 +39,31 @@ struct Results {
 }
 
 
-fn get_download_link(name: String) -> String {
-    let body: String = ureq::get(&format!("{}{}", SEARCH_URL, name))
-        .set("Example-Header", "header value")
-        .call().unwrap()
-        .into_string().unwrap();
+async fn get_download_link(name: String)  {
+    let body: String = reqwest::get(&format!("{}{}", SEARCH_URL, name))
+        .await.unwrap()
+        .text()
+        .await.unwrap();
 
-    let search_res: Value = serde_json::from_str(&body).unwrap();
+    let search_res: Results = serde_json::from_str(&body).unwrap();
 
-    println!("{}", search_res["results"][0]["media_preview_url"]);
+    let path = &search_res.results[0].media_preview_url;
+    let song = &search_res.results[0].song;
+    let temp_url = path.replace("preview", "h");
+    let final_url = temp_url.replace("_96_p.mp4", "_320.mp4");
 
-    todo!()
+    println!("{}", final_url);
+
+
+    let response = reqwest::get(final_url).await.unwrap();
+    let mut file = std::fs::File::create(format!("{}.mp4",song)).unwrap();
+    let mut content =  Cursor::new(response.bytes().await.unwrap());
+    std::io::copy(&mut content, &mut file).unwrap();
 
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let cli = Cli::parse();
     let name:String = {
         if let Some(name) = cli.name.as_deref() {
@@ -61,5 +75,5 @@ fn main() {
 
     let action: Action = cli.action;
 
-    get_download_link(name);
+    get_download_link(name).await;
 }

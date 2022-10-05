@@ -22,7 +22,7 @@
 
         # For `nix develop`:
         devShell = pkgs.mkShell {
-          nativeBuildInputs = with pkgs; [ rustup rust-analyzer pkg-config openssl ];
+          nativeBuildInputs = with pkgs; [ rustup rust-analyzer pkg-config openssl mpv ];
         };
       }
     );
