@@ -59,6 +59,9 @@ async fn get_download_link(temp_link: String) -> String {
 
 async fn download_song(final_url: String, song: String) {
     let response = reqwest::get(final_url).await.unwrap();
+    if response.status() == 404 {
+        panic!("Song not found on saavn");
+    }
     let mut file = std::fs::File::create(format!("{}.mp4",song)).unwrap();
     let mut content =  Cursor::new(response.bytes().await.unwrap());
     std::io::copy(&mut content, &mut file).unwrap();
@@ -75,6 +78,7 @@ async fn select_from_res(results: Results) {
         Some(idx) => {
             let temp_url = &results.results[idx].media_preview_url;
             let final_url = get_download_link(temp_url.to_string()).await;
+            println!("download url: {}", final_url);
             let name = &results.results[idx].song;
             download_song(final_url, name.to_string()).await;
         },
