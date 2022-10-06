@@ -1,12 +1,13 @@
 use clap::{Parser,  ValueEnum};
 use std::io::Cursor;
-use serde_json::{Result, Value};
 use serde::Deserialize;
 
+use dialoguer::{
+    FuzzySelect,
+    theme::ColorfulTheme
+};
+use console::Term;
 
-use std::io::Read;
-use std::fs::File;
-use std::io::prelude::*;
 
 const SEARCH_URL: &str = "https://www.jiosaavn.com/api.php?_format=json&n=5&p=1&_marker=0&ctx=android&__call=search.getResults&q=";
 
@@ -27,10 +28,11 @@ struct Cli {
 
 #[derive(Deserialize)]
 struct Song { 
-   id: String,
+//   id: String,
    song: String,
-   image: String,
+//   image: String,
    media_preview_url: String,
+   primary_artists: String,
 }
 
 #[derive(Deserialize)]
@@ -75,7 +77,19 @@ async fn main() {
 
 
     match cli.action {
-        Action::Search => todo!(),
+        Action::Search => {
+            let results = search_res(name).await;
+            let song_strings: Vec<String> = results.results.iter().map(|item| format!("{} - {}", item.song, item.primary_artists)).collect();
+            let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
+                .items(&song_strings)
+                .default(0)
+                .interact_on_opt(&Term::stderr()).unwrap();
+
+            match selection  {
+                Some(idx) => println!("Selected song is {}", song_strings[idx]),
+                None => println!("Nothing slected")
+            }
+        },
         Action::Download => {
             let results = search_res(name).await;
             let name = &results.results[0].song;
