@@ -64,6 +64,25 @@ async fn download_song(final_url: String, song: String) {
     std::io::copy(&mut content, &mut file).unwrap();
 }
 
+async fn select_from_res(results: Results) {
+    let song_strings: Vec<String> = results.results.iter().map(|item| format!("{} - {}", item.song, item.primary_artists)).collect();
+    let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
+        .items(&song_strings)
+        .default(0)
+        .interact_on_opt(&Term::stderr()).unwrap();
+
+    match selection  {
+        Some(idx) => {
+            let temp_url = &results.results[idx].media_preview_url;
+            let final_url = get_download_link(temp_url.to_string()).await;
+            let name = &results.results[idx].song;
+            download_song(final_url, name.to_string()).await;
+        },
+        None => println!("Nothing slected")
+    }
+
+}
+
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
@@ -79,16 +98,7 @@ async fn main() {
     match cli.action {
         Action::Search => {
             let results = search_res(name).await;
-            let song_strings: Vec<String> = results.results.iter().map(|item| format!("{} - {}", item.song, item.primary_artists)).collect();
-            let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
-                .items(&song_strings)
-                .default(0)
-                .interact_on_opt(&Term::stderr()).unwrap();
-
-            match selection  {
-                Some(idx) => println!("Selected song is {}", song_strings[idx]),
-                None => println!("Nothing slected")
-            }
+            select_from_res(results).await;
         },
         Action::Download => {
             let results = search_res(name).await;
