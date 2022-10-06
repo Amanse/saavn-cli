@@ -39,27 +39,27 @@ struct Results {
 }
 
 
-async fn get_download_link(name: String)  {
+async fn search_res(name: String) -> Results {
     let body: String = reqwest::get(&format!("{}{}", SEARCH_URL, name))
         .await.unwrap()
         .text()
         .await.unwrap();
 
-    let search_res: Results = serde_json::from_str(&body).unwrap();
+    serde_json::from_str(&body).unwrap()
+}
 
-    let path = &search_res.results[0].media_preview_url;
-    let song = &search_res.results[0].song;
-    let temp_url = path.replace("preview", "h");
+async fn get_download_link(temp_link: String) -> String {
+    let temp_url = temp_link.replace("preview", "h");
     let final_url = temp_url.replace("_96_p.mp4", "_320.mp4");
 
-    println!("{}", final_url);
+    final_url
+}
 
-
+async fn download_song(final_url: String, song: String) {
     let response = reqwest::get(final_url).await.unwrap();
     let mut file = std::fs::File::create(format!("{}.mp4",song)).unwrap();
     let mut content =  Cursor::new(response.bytes().await.unwrap());
     std::io::copy(&mut content, &mut file).unwrap();
-
 }
 
 #[tokio::main]
@@ -73,7 +73,15 @@ async fn main() {
         }
     };
 
-    let action: Action = cli.action;
 
-    get_download_link(name).await;
+    match cli.action {
+        Action::Search => todo!(),
+        Action::Download => {
+            let results = search_res(name).await;
+            let name = &results.results[0].song;
+            let temp_link = &results.results[0].media_preview_url;
+            let link =  get_download_link(temp_link.to_string()).await;
+            download_song(link, name.to_string()).await;
+        }
+    }
 }
