@@ -1,5 +1,6 @@
 use clap::{Parser,  ValueEnum};
-use std::io::Cursor;
+use std::io::{Write};
+use std::cmp::min;
 use serde::Deserialize;
 
 use dialoguer::{
@@ -7,9 +8,12 @@ use dialoguer::{
     theme::ColorfulTheme
 };
 use console::Term;
+use indicatif::{ProgressBar, ProgressStyle};
+use futures_util::StreamExt;
 
 
 const SEARCH_URL: &str = "https://www.jiosaavn.com/api.php?_format=json&n=5&p=1&_marker=0&ctx=android&__call=search.getResults&q=";
+const TEMPLATE: &str = "[{elapsed_precise}] {bar:40.cyan/blue} {bytes}/{total_bytes} {bytes_per_sec}";
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 enum Action {
@@ -62,9 +66,28 @@ async fn download_song(final_url: String, song: String) {
     if response.status() == 404 {
         panic!("Song not found on saavn");
     }
+    let total_size = response.content_length().ok_or(format!("Failed to get content length")).unwrap();
+
+    //ProgressBar
+    let pb = ProgressBar::new(total_size);
+    pb.set_style(ProgressStyle::default_bar().template(TEMPLATE).unwrap());
+    // pb.set_style(ProgressStyle::default_bar()
+    //     .template("{msg}\n{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})")
+    //     .progress_chars("#>-"));
+    // pb.set_message(&format!("Downloading {}", final_url));
+
     let mut file = std::fs::File::create(format!("{}.mp4",song)).unwrap();
-    let mut content =  Cursor::new(response.bytes().await.unwrap());
-    std::io::copy(&mut content, &mut file).unwrap();
+    let mut downloaded: u64 = 0;
+    let mut stream = response.bytes_stream();
+
+    while let Some(item) = stream.next().await {
+        let chunk = item.or(Err(format!("error while downloading"))).unwrap();
+        file.write_all(&chunk).unwrap();
+        let new = min(downloaded+(chunk.len() as u64), total_size);
+        downloaded = new;
+        pb.set_position(new);
+    }
+    // let mut content =  Cursor::new(response.bytes().await.unwrap());
 }
 
 async fn select_from_res(results: Results) {
