@@ -35,9 +35,7 @@ struct Cli {
 
 #[derive(Deserialize)]
 struct Song { 
-//   id: String,
    song: String,
-//   image: String,
    media_preview_url: String,
    primary_artists: String,
 }
@@ -60,15 +58,12 @@ async fn search_res(name: String) -> Results {
 async fn get_download_link(temp_link: String) -> String {
     let temp_url = temp_link.replace("preview", "h");
     let final_url = temp_url.replace("_96_p.mp4", "_320.mp4");
-
-    final_url
+    fix_link(final_url).await
 }
 
 async fn download_song(final_url: String, song: String) {
-    let response = reqwest::get(final_url).await.unwrap();
-    if response.status() == 404 {
-        panic!("Song not found on saavn");
-    }
+    let response = reqwest::get(&final_url).await.unwrap();
+
     let total_size = response.content_length().ok_or(format!("Failed to get content length")).unwrap();
 
     //ProgressBar
@@ -135,6 +130,15 @@ fn play_link(link: String) {
         .arg(link)
         .spawn()
         .expect("Mpv command failed");
+}
+
+async fn fix_link(link: String) -> String {
+    let resp = reqwest::get(&link).await.unwrap();
+    if resp.status() == 404 {
+        link.replace("mp4", "mp3")
+    } else {
+        link
+    }
 }
 
 #[tokio::main]
