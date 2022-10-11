@@ -70,7 +70,15 @@ async fn download_song(final_url: String, song: String) {
     let pb = ProgressBar::new(total_size);
     pb.set_style(ProgressStyle::default_bar().template(TEMPLATE).unwrap());
 
-    let mut file = std::fs::File::create(format!("{}.mp4",song)).unwrap();
+    let format = {
+        if final_url.contains("mp4") {
+            "mp4"
+        } else {
+            "mp3"
+        }
+    };
+
+    let mut file = std::fs::File::create(format!("{}.{}",song,format)).unwrap();
     let mut downloaded: u64 = 0;
     let mut stream = response.bytes_stream();
 
