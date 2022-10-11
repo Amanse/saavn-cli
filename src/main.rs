@@ -10,6 +10,8 @@ use dialoguer::{
 use console::Term;
 use indicatif::{ProgressBar, ProgressStyle};
 use futures_util::StreamExt;
+use std::process::Command;
+
 
 
 const SEARCH_URL: &str = "https://www.jiosaavn.com/api.php?_format=json&n=5&p=1&_marker=0&ctx=android&__call=search.getResults&q=";
@@ -19,6 +21,7 @@ const TEMPLATE: &str = "[{elapsed_precise}] {bar:40.cyan/blue} {bytes}/{total_by
 enum Action {
     Search,
     Download,
+    Play,
 }
 
 #[derive(Parser)]
@@ -71,10 +74,6 @@ async fn download_song(final_url: String, song: String) {
     //ProgressBar
     let pb = ProgressBar::new(total_size);
     pb.set_style(ProgressStyle::default_bar().template(TEMPLATE).unwrap());
-    // pb.set_style(ProgressStyle::default_bar()
-    //     .template("{msg}\n{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})")
-    //     .progress_chars("#>-"));
-    // pb.set_message(&format!("Downloading {}", final_url));
 
     let mut file = std::fs::File::create(format!("{}.mp4",song)).unwrap();
     let mut downloaded: u64 = 0;
@@ -87,7 +86,6 @@ async fn download_song(final_url: String, song: String) {
         downloaded = new;
         pb.set_position(new);
     }
-    // let mut content =  Cursor::new(response.bytes().await.unwrap());
 }
 
 async fn select_from_res(results: Results) {
@@ -103,11 +101,40 @@ async fn select_from_res(results: Results) {
             let final_url = get_download_link(temp_url.to_string()).await;
             println!("download url: {}", final_url);
             let name = &results.results[idx].song;
-            download_song(final_url, name.to_string()).await;
+            download_or_play(name.to_string(), final_url).await;
         },
         None => println!("Nothing slected")
     }
 
+}
+
+async fn download_or_play(name: String, link: String) {
+    let options = ["Play", "Download"];
+    let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
+        .items(&options)
+        .default(0)
+        .interact_on_opt(&Term::stderr()).unwrap();
+
+    match selection {
+        Some(idx) => {
+            if idx == 0 {
+                play_link(link);
+            } else {
+                download_song(link, name).await;
+            }
+        },
+        None => {
+            println!("Nothing was selected");
+        }
+    }
+
+}
+
+fn play_link(link: String) {
+    Command::new("mpv")
+        .arg(link)
+        .spawn()
+        .expect("Mpv command failed");
 }
 
 #[tokio::main]
@@ -133,6 +160,12 @@ async fn main() {
             let temp_link = &results.results[0].media_preview_url;
             let link =  get_download_link(temp_link.to_string()).await;
             download_song(link, name.to_string()).await;
+        }, 
+        Action::Play => {
+            let results = search_res(name).await;
+            let temp_link = &results.results[0].media_preview_url;
+            let link =  get_download_link(temp_link.to_string()).await;
+            play_link(link);
         }
     }
 }
