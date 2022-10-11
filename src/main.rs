@@ -15,7 +15,7 @@ use std::process::Command;
 
 
 const SEARCH_URL: &str = "https://www.jiosaavn.com/api.php?_format=json&n=5&p=1&_marker=0&ctx=android&__call=search.getResults&q=";
-const TEMPLATE: &str = "[{elapsed_precise}] {bar:40.cyan/blue} {bytes}/{total_bytes} {bytes_per_sec}";
+const TEMPLATE: &str = " {msg} \n [{elapsed_precise}] {bar:40.cyan/blue} {bytes}/{total_bytes} {bytes_per_sec}";
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 enum Action {
@@ -67,7 +67,7 @@ async fn download_song(final_url: String, song: String) {
     let total_size = response.content_length().ok_or(format!("Failed to get content length")).unwrap();
 
     //ProgressBar
-    let pb = ProgressBar::new(total_size);
+    let pb = ProgressBar::new(total_size).with_message(format!("Downloading : {}", song));
     pb.set_style(ProgressStyle::default_bar().template(TEMPLATE).unwrap());
 
     let format = {
