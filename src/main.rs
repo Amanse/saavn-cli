@@ -1,7 +1,8 @@
 use clap::{Parser,  ValueEnum};
 use std::io::{Write};
 use std::cmp::min;
-use serde::Deserialize;
+
+use saavn_rs::*;
 
 use dialoguer::{
     FuzzySelect,
@@ -9,12 +10,11 @@ use dialoguer::{
 };
 use console::Term;
 use indicatif::{ProgressBar, ProgressStyle};
-use futures_util::StreamExt;
 use std::process::Command;
 
+use futures_util::StreamExt;
 
 
-const SEARCH_URL: &str = "https://www.jiosaavn.com/api.php?_format=json&n=5&p=1&_marker=0&ctx=android&__call=search.getResults&q=";
 const TEMPLATE: &str = " {msg} \n [{elapsed_precise}] {bar:40.cyan/blue} {bytes}/{total_bytes} {bytes_per_sec}";
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
@@ -31,34 +31,6 @@ struct Cli {
     action: Action,
     #[arg(short, long)]
     name: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct Song { 
-   song: String,
-   media_preview_url: String,
-   primary_artists: String,
-}
-
-#[derive(Deserialize)]
-struct Results {
-    results: Vec<Song>,
-}
-
-
-async fn search_res(name: String) -> Results {
-    let body: String = reqwest::get(&format!("{}{}", SEARCH_URL, name))
-        .await.unwrap()
-        .text()
-        .await.unwrap();
-
-    serde_json::from_str(&body).unwrap()
-}
-
-async fn get_download_link(temp_link: String) -> String {
-    let temp_url = temp_link.replace("preview", "h");
-    let final_url = temp_url.replace("_96_p.mp4", "_320.mp4");
-    fix_link(final_url).await
 }
 
 async fn download_song(final_url: String, song: String) {
@@ -100,10 +72,10 @@ async fn select_from_res(results: Results) {
 
     match selection  {
         Some(idx) => {
-            let temp_url = &results.results[idx].media_preview_url;
-            let final_url = get_download_link(temp_url.to_string()).await;
+            let req_song = results.results.into_iter().nth(idx).unwrap();
+            let final_url = convert_to_320(req_song.media_preview_url);
             println!("download url: {}", final_url);
-            let name = &results.results[idx].song;
+            let name = req_song.song;
             download_or_play(name.to_string(), final_url).await;
         },
         None => println!("Nothing slected")
@@ -140,15 +112,6 @@ fn play_link(link: String) {
         .expect("Mpv command failed");
 }
 
-async fn fix_link(link: String) -> String {
-    let resp = reqwest::get(&link).await.unwrap();
-    if resp.status() == 404 {
-        link.replace("mp4", "mp3")
-    } else {
-        link
-    }
-}
-
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
@@ -163,20 +126,15 @@ async fn main() {
 
     match cli.action {
         Action::Search => {
-            let results = search_res(name).await;
-            select_from_res(results).await;
+            let ress: Results = get_all_res(name).await;
+            select_from_res(ress).await;
         },
         Action::Download => {
-            let results = search_res(name).await;
-            let name = &results.results[0].song;
-            let temp_link = &results.results[0].media_preview_url;
-            let link =  get_download_link(temp_link.to_string()).await;
-            download_song(link, name.to_string()).await;
+            let (link,song) = get_download_link_name(name).await;
+            download_song(link, song).await;
         }, 
         Action::Play => {
-            let results = search_res(name).await;
-            let temp_link = &results.results[0].media_preview_url;
-            let link =  get_download_link(temp_link.to_string()).await;
+            let link = get_download_link_name(name).await.0;
             play_link(link);
         }
     }
