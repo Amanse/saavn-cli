@@ -23,19 +23,23 @@ pub struct Results {
 //Public fn that will interact and send the downnload link to the main app
 pub async fn get_download_link_name(name: String) -> Result<(String, String)> {
     let res = first_res(name).await?;
-    let mut temp_url = convert_to_320(res.media_preview_url);
-    let resp = reqwest::get(&temp_url).await?;
-    if resp.status() == 404 {
-        temp_url = temp_url.replace("mp4", "mp3");
-        let resp = reqwest::get(&temp_url).await?;
-        if resp.status() == 404 {
-            return Err(eyre!("Song not available!"))
-        } else {
-            return Ok((temp_url, res.song))
-        }
-    } else {
-        return Ok((temp_url, res.song))
+    let temp_url = convert_to_320(res.media_preview_url).await?;
+    match handle_mp3(temp_url).await {
+        Ok(v) => return Ok((v, res.song)),
+        Err(e) => return Err(e),
     }
+    // let resp = reqwest::get(&temp_url).await?;
+    // if resp.status() == 404 {
+    //     temp_url = temp_url.replace("mp4", "mp3");
+    //     let resp = reqwest::get(&temp_url).await?;
+    //     if resp.status() == 404 ?{
+    //         return Err(eyre!("Song not available!"))
+    //     } else {
+    //         return Ok((temp_url, res.song))
+    //     }
+    // } else {
+    //     return Ok((temp_url, res.song))
+    // }
 }
 
 //Public fn that will return vector of search results to the main app
@@ -52,13 +56,28 @@ pub async fn get_all_res(name: String) -> Result<Results> {
     Ok(res)
 }
 
-pub fn convert_to_320(link: String) -> String {
-    link.replace("preview", "h").replace("_96_p.mp4", "_320.mp4")
+pub async fn convert_to_320(link: String) -> Result<String> {
+    Ok(handle_mp3(link.replace("preview", "h").replace("_96_p.mp4", "_320.mp4")).await?)
 }
 
 //Function that returns the first result for playing or downloading
 async fn first_res(name: String) -> Result<Song> {
     get_all_res(name).await?.results.into_iter().nth(0).ok_or_else(|| eyre!("No songs in the result"))
+}
+
+async fn handle_mp3(temp_url: String) -> Result<String> {
+    let resp = reqwest::get(&temp_url).await?;
+    if resp.status() == 404 {
+        let final_url = temp_url.replace("mp4", "mp3");
+        let resp = reqwest::get(&final_url).await?;
+        if resp.status() == 404 {
+            return Err(eyre!("Song not available! {}", temp_url))
+        } else {
+            return Ok(final_url)
+        }
+    } else {
+        return Ok(temp_url)
+    }
 }
 
 #[cfg(test)]
