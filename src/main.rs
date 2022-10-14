@@ -1,5 +1,5 @@
 use clap::{Parser,  ValueEnum};
-use std::io::{Write};
+use std::io::Write;
 use std::cmp::min;
 
 use saavn_rs::*;
@@ -113,7 +113,7 @@ fn play_link(link: String) {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), eyre::Report> {
     let cli = Cli::parse();
     let name:String = {
         if let Some(name) = cli.name.as_deref() {
@@ -126,16 +126,21 @@ async fn main() {
 
     match cli.action {
         Action::Search => {
-            let ress: Results = get_all_res(name).await;
+            let ress: Results = match get_all_res(name).await {
+                Ok(v) => v,
+                Err(e) => return Err(e)
+            };
             select_from_res(ress).await;
         },
         Action::Download => {
-            let (link,song) = get_download_link_name(name).await;
+            let (link,song) = get_download_link_name(name).await?;
             download_song(link, song).await;
         }, 
         Action::Play => {
-            let link = get_download_link_name(name).await.0;
+            let link = get_download_link_name(name).await?.0;
             play_link(link);
         }
-    }
+    };
+
+    Ok(())
 }
