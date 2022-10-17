@@ -1,6 +1,4 @@
 use clap::{Parser,  ValueEnum};
-use std::io::Write;
-use std::cmp::min;
 
 use saavn_rs::*;
 
@@ -9,13 +7,11 @@ use dialoguer::{
     theme::ColorfulTheme
 };
 use console::Term;
-use indicatif::{ProgressBar, ProgressStyle};
 use std::process::Command;
 
-use futures_util::StreamExt;
-
-
-const TEMPLATE: &str = " {msg} \n [{elapsed_precise}] {bar:40.cyan/blue} {bytes}/{total_bytes} {bytes_per_sec}";
+use trauma::{download::Download, downloader::DownloaderBuilder};
+use url::Url;
+use std::path::PathBuf;
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 enum Action {
@@ -29,19 +25,16 @@ enum Action {
 struct Cli {
     #[arg(value_enum)]
     action: Action,
-    #[arg(short, long)]
-    name: Option<String>,
+    name: Option<Vec<String>>,
 }
 
-async fn download_song(final_url: String, song: String) {
-    let response = reqwest::get(&final_url).await.unwrap();
-
-    let total_size = response.content_length().ok_or(format!("Failed to get content length")).unwrap();
-
+async fn download_song(link_and_names: Vec<(String,String)>) {
     //ProgressBar
-    let pb = ProgressBar::new(total_size).with_message(format!("Downloading : {}", song));
-    pb.set_style(ProgressStyle::default_bar().template(TEMPLATE).unwrap());
+    // let pb = ProgressBar::new(total_size).with_message(format!("Downloading : {}", song));
+    // pb.set_style(ProgressStyle::default_bar().template(TEMPLATE).unwrap());
 
+    let mut downloads = vec![];
+    for (final_url, song) in link_and_names {
     let format = {
         if final_url.contains("mp4") {
             "mp4"
@@ -50,17 +43,12 @@ async fn download_song(final_url: String, song: String) {
         }
     };
 
-    let mut file = std::fs::File::create(format!("{}.{}",song,format)).unwrap();
-    let mut downloaded: u64 = 0;
-    let mut stream = response.bytes_stream();
-
-    while let Some(item) = stream.next().await {
-        let chunk = item.or(Err(format!("error while downloading"))).unwrap();
-        file.write_all(&chunk).unwrap();
-        let new = min(downloaded+(chunk.len() as u64), total_size);
-        downloaded = new;
-        pb.set_position(new);
+    downloads.push(Download::new(&Url::parse(&final_url).unwrap(), &format!("{}.{}", song, format)))
     }
+    let downloader_boi = DownloaderBuilder::new()
+        .directory(PathBuf::from("output"))
+        .build();
+    downloader_boi.download(&downloads).await;
 }
 
 async fn select_from_res(results: Results) {
@@ -93,9 +81,9 @@ async fn download_or_play(name: String, link: String) {
     match selection {
         Some(idx) => {
             if idx == 0 {
-                play_link(link);
+                play_link(vec![(link,name)]);
             } else {
-                download_song(link, name).await;
+                download_song(vec![(link, name)]).await;
             }
         },
         None => {
@@ -105,39 +93,33 @@ async fn download_or_play(name: String, link: String) {
 
 }
 
-fn play_link(link: String) {
-    Command::new("mpv")
-        .arg(link)
-        .spawn()
-        .expect("Mpv command failed");
+fn play_link(links: Vec<(String,String)>) {
+    let mut mpv = Command::new("mpv");
+    for link in links {
+        mpv.arg(link.0);
+    }
+    mpv.spawn().unwrap();
 }
 
 #[tokio::main]
 async fn main() -> Result<(), eyre::Report> {
     let cli = Cli::parse();
-    let name:String = {
-        if let Some(name) = cli.name.as_deref() {
-            name.to_string()
-        } else {
-            panic!("Needs some name!")
-        }
-    };
-
+    let names:Vec<String> = cli.name.unwrap();
 
     match cli.action {
         Action::Search => {
-            let ress: Results = match get_all_res(name).await {
+            let ress: Results = match get_all_res(names.into_iter().nth(0).unwrap()).await {
                 Ok(v) => v,
                 Err(e) => return Err(e)
             };
             select_from_res(ress).await;
         },
         Action::Download => {
-            let (link,song) = get_download_link_name(name).await?;
-            download_song(link, song).await;
+            let link_and_names = get_download_link_name(names).await?;
+            download_song(link_and_names).await;
         }, 
         Action::Play => {
-            let link = get_download_link_name(name).await?.0;
+            let link = get_download_link_name(names).await?;
             play_link(link);
         }
     };

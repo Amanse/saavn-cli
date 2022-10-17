@@ -1,6 +1,7 @@
 use serde::Deserialize;
 use eyre::{Result, eyre};
 
+
 const SEARCH_URL: &str = "https://www.jiosaavn.com/api.php?_format=json&n=5&p=1&_marker=0&ctx=android&__call=search.getResults&q=";
 
 #[derive(Deserialize)]
@@ -21,25 +22,22 @@ pub struct Results {
 //3. Function to convert 96kpbs link to 320kbps link
 
 //Public fn that will interact and send the downnload link to the main app
-pub async fn get_download_link_name(name: String) -> Result<(String, String)> {
-    let res = first_res(name).await?;
-    let temp_url = convert_to_320(res.media_preview_url).await?;
-    match handle_mp3(temp_url).await {
-        Ok(v) => return Ok((v, res.song)),
-        Err(e) => return Err(e),
+pub async fn get_download_link_name(names: Vec<String>) -> Result<Vec<(String, String)>> {
+    if names.len() >= 15 || names.len() < 1 {
+        return Err(eyre!("Songs must be between 1 and 15"));
+    }  else {
+        let mut links_and_names: Vec<(String,String)> = vec![];
+        for name in names {
+        let res = first_res(name.to_string()).await?;
+        let temp_url = convert_to_320(res.media_preview_url).await?;
+        match handle_mp3(temp_url).await {
+            Ok(v) => links_and_names.push((v, res.song)),
+            Err(e) => return Err(e),
+        }
+        }
+       Ok(links_and_names)
     }
-    // let resp = reqwest::get(&temp_url).await?;
-    // if resp.status() == 404 {
-    //     temp_url = temp_url.replace("mp4", "mp3");
-    //     let resp = reqwest::get(&temp_url).await?;
-    //     if resp.status() == 404 ?{
-    //         return Err(eyre!("Song not available!"))
-    //     } else {
-    //         return Ok((temp_url, res.song))
-    //     }
-    // } else {
-    //     return Ok((temp_url, res.song))
-    // }
+
 }
 
 //Public fn that will return vector of search results to the main app
@@ -82,19 +80,25 @@ async fn handle_mp3(temp_url: String) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
+    use std::vec;
+
     use crate::get_download_link_name;
 
     #[tokio::test]
     async fn check_download() {
-        let link = get_download_link_name("told you so hanita".to_string()).await.unwrap().0;
-        let dl_link = String::from("http://h.saavncdn.com/062/bdf7ab0f70309de97e0c6a169e7bc520_320.mp3");
-        assert_eq!(dl_link, link);
+        let link = get_download_link_name(vec![String::from("told you so hanita"), String::from("Pasoori")]).await.unwrap();
+        let told_you_dl_link = String::from("http://h.saavncdn.com/062/bdf7ab0f70309de97e0c6a169e7bc520_320.mp3");
+        let told_you_name = String::from("Told You So");
+        let pasoori_url = String::from("http://h.saavncdn.com/663/4aef67fd9511a82b1f49835101c145a7_320.mp4");
+        let pasoori_name = String::from("Pasoori");
+        let res = vec![(told_you_dl_link, told_you_name), (pasoori_url, pasoori_name)];
+        assert_eq!(res, link);
     }
 
-    #[tokio::test]
-    async fn check_download_mp4() {
-        let link = get_download_link_name(String::from("Pasoori")).await.unwrap().0;
-        let dl_link = String::from("http://h.saavncdn.com/663/4aef67fd9511a82b1f49835101c145a7_320.mp4");
-        assert_eq!(link, dl_link);
-    }
+    // #[tokio::test]
+    // async fn check_download_mp4() {
+    //     let link = get_download_link_name().await.unwrap().0;
+    //     let dl_link = String::from();
+    //     assert_eq!(link, dl_link);
+    // }
 }
