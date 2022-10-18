@@ -1,6 +1,6 @@
 use serde::Deserialize;
-use eyre::{Result, eyre};
-
+use eyre::Result;
+use thiserror::Error;
 
 const SEARCH_URL: &str = "https://www.jiosaavn.com/api.php?_format=json&n=5&p=1&_marker=0&ctx=android&__call=search.getResults&q=";
 
@@ -16,24 +16,45 @@ pub struct Results {
    pub results: Vec<Song>,
 }
 
+#[derive(Error, Debug)]
+pub enum SaavnRsErros {
+    #[error("Serialization error: {0}")]
+    SerializationError(#[from] serde_json::Error),
+    #[error("Number of songs must be between 1 and 15")]
+    InvalidNumberOfSongs,
+    #[error("Song is not available on JioSaavn, skipping")]
+    SongNotFound,
+    #[error("Request failure from api {0:?}")]
+    RequestFailure(#[from] reqwest::Error),
+    #[error("No songs in the result")] 
+    NoSongInResult,
+    #[error("Skipping")]
+    SkipSong,
+}
+
 //NEEDS
 //1. Function that returns link from first res for given name
 //2. Function that returns vector of songs
 //3. Function to convert 96kpbs link to 320kbps link
 
 //Public fn that will interact and send the downnload link to the main app
-pub async fn get_download_link_name(names: Vec<String>) -> Result<Vec<(String, String)>> {
+pub async fn get_download_link_name(names: Vec<String>) -> Result<Vec<(String, String)>, SaavnRsErros> {
     if names.len() >= 15 || names.len() < 1 {
-        return Err(eyre!("Songs must be between 1 and 15"));
+        return Err(SaavnRsErros::InvalidNumberOfSongs);
     }  else {
         let mut links_and_names: Vec<(String,String)> = vec![];
         for name in names {
         let res = first_res(name.to_string()).await?;
-        let temp_url = convert_to_320(res.media_preview_url).await?;
-        match handle_mp3(temp_url).await {
-            Ok(v) => links_and_names.push((v, res.song)),
-            Err(e) => return Err(e),
-        }
+        let final_url = match convert_to_320(res.media_preview_url).await {
+            Ok(v) => v,
+            Err(e) => {
+                match e {
+                    SaavnRsErros::SongNotFound => {println!("Skipping {}", name); continue;},
+                    _ => return Err(e)
+                }
+            },
+        };
+        links_and_names.push((final_url, res.song))
         }
        Ok(links_and_names)
     }
@@ -41,7 +62,7 @@ pub async fn get_download_link_name(names: Vec<String>) -> Result<Vec<(String, S
 }
 
 //Public fn that will return vector of search results to the main app
-pub async fn get_all_res(name: String) -> Result<Results> {
+pub async fn get_all_res(name: String) -> Result<Results, SaavnRsErros> {
     let body: String = reqwest::get(&format!("{}{}", SEARCH_URL, name))
         .await?
         .text()
@@ -49,27 +70,31 @@ pub async fn get_all_res(name: String) -> Result<Results> {
 
     let res = serde_json::from_str::<Results>(&body)?;
     if res.results.len() == 0 {
-        return Err(eyre!("No songs found"));
+        return Err(SaavnRsErros::NoSongInResult);
     }
     Ok(res)
 }
 
-pub async fn convert_to_320(link: String) -> Result<String> {
+pub async fn convert_to_320(link: String) -> Result<String, SaavnRsErros> {
     Ok(handle_mp3(link.replace("preview", "h").replace("_96_p.mp4", "_320.mp4")).await?)
 }
 
 //Function that returns the first result for playing or downloading
-async fn first_res(name: String) -> Result<Song> {
-    get_all_res(name).await?.results.into_iter().nth(0).ok_or_else(|| eyre!("No songs in the result"))
+async fn first_res(name: String) -> Result<Song, SaavnRsErros> {
+    match get_all_res(name).await?.results.into_iter().nth(0) {
+        Some(v) => Ok(v),
+        None => Err(SaavnRsErros::NoSongInResult)
+    }
+    
 }
 
-async fn handle_mp3(temp_url: String) -> Result<String> {
+async fn handle_mp3(temp_url: String) -> Result<String, SaavnRsErros> {
     let resp = reqwest::get(&temp_url).await?;
     if resp.status() == 404 {
         let final_url = temp_url.replace("mp4", "mp3");
         let resp = reqwest::get(&final_url).await?;
         if resp.status() == 404 {
-            return Err(eyre!("Song not available! {}", temp_url))
+            return Err(SaavnRsErros::SongNotFound)
         } else {
             return Ok(final_url)
         }
@@ -94,11 +119,4 @@ mod tests {
         let res = vec![(told_you_dl_link, told_you_name), (pasoori_url, pasoori_name)];
         assert_eq!(res, link);
     }
-
-    // #[tokio::test]
-    // async fn check_download_mp4() {
-    //     let link = get_download_link_name().await.unwrap().0;
-    //     let dl_link = String::from();
-    //     assert_eq!(link, dl_link);
-    // }
 }

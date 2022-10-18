@@ -102,7 +102,7 @@ fn play_link(links: Vec<(String,String)>) {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), eyre::Report> {
+async fn main() -> Result<(), SaavnRsErros> {
     let cli = Cli::parse();
     let names:Vec<String> = cli.name.unwrap();
 
