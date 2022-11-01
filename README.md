@@ -18,9 +18,9 @@ Options:
 ```
 saavn-cli search "<name>"
 ```
+![ezgif com-gif-maker](https://user-images.githubusercontent.com/13214574/199312259-108fb407-a020-478c-aec4-18cbf9aa5f95.gif)
 
-![](./example-vids/vid1.mp4)
+---
 
-![](./example-vids/vid2.mp4)
+![ezgif com-gif-maker (2)](https://user-images.githubusercontent.com/13214574/199312618-196b42b6-94fc-4d67-972a-d9eaecebbb7a.gif)
 
-to get top results, select the name with return/enter key and then select play or download action
