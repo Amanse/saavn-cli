@@ -24,3 +24,4 @@ saavn-cli search "<name>"
 
 ![ezgif com-gif-maker (2)](https://user-images.githubusercontent.com/13214574/199312618-196b42b6-94fc-4d67-972a-d9eaecebbb7a.gif)
 
+

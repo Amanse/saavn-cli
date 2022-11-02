@@ -61,7 +61,11 @@ async fn select_from_res(results: Results) {
     match selection  {
         Some(idx) => {
             let req_song = results.results.into_iter().nth(idx).unwrap();
-            let final_url = convert_to_320(req_song.media_preview_url).await.unwrap();
+            let url = match req_song.media_preview_url {
+                Some(v) => v,
+                None => panic!("No media preview url! contact library maker!"),
+            };
+            let final_url = convert_to_320(url).await.unwrap();
             println!("download url: {}", final_url);
             let name = req_song.song;
             download_or_play(name.to_string(), final_url).await;

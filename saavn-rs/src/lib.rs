@@ -4,14 +4,14 @@ use thiserror::Error;
 
 const SEARCH_URL: &str = "https://www.jiosaavn.com/api.php?_format=json&n=5&p=1&_marker=0&ctx=android&__call=search.getResults&q=";
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct Song { 
    pub song: String,
-   pub media_preview_url: String,
+   pub media_preview_url: Option<String>,
    pub primary_artists: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct Results {
    pub results: Vec<Song>,
 }
@@ -30,6 +30,8 @@ pub enum SaavnRsErros {
     NoSongInResult,
     #[error("Skipping")]
     SkipSong,
+    #[error("Missing preview url")]
+    MissingPreviewUrl,
 }
 
 //NEEDS
@@ -45,7 +47,11 @@ pub async fn get_download_link_name(names: Vec<String>) -> Result<Vec<(String, S
         let mut links_and_names: Vec<(String,String)> = vec![];
         for name in names {
         let res = first_res(name.to_string()).await?;
-        let final_url = match convert_to_320(res.media_preview_url).await {
+        let url = match res.media_preview_url {
+            Some(v) => v,
+            None => return Err(SaavnRsErros::MissingPreviewUrl),
+        };
+        let final_url = match convert_to_320(url).await {
             Ok(v) => v,
             Err(e) => {
                 match e {
